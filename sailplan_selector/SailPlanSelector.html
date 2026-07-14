@@ -1,0 +1,1023 @@
+<!DOCTYPE html>
+<!-- Pelican Sail Plan Selector -->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Sail Plan Selector — Pelican</title>
+<style>
+  :root{
+    --primary:#1A365D; --secondary:#2B6CB0; --accent:#D69E2E;
+    --dark:#2D3748; --light:#F7FAFC; --border:#E2E8F0;
+    --danger:#9B2C2C; --success:#2F855A;
+    --c-r1:#2F855A; --c-r2:#319795; --c-r3:#2B6CB0; --c-r4:#6B46C1; --c-r5:#D69E2E;
+    --c-r6:#E53E3E; --c-r7:#3182CE; --c-r8:#4A5568; --c-r9:#805AD5; --c-r10:#DD6B20;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html,body{height:100%;}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    background:#EDF2F7;color:var(--dark);line-height:1.4;
+    -webkit-text-size-adjust:100%;}
+  .wrap{max-width:760px;margin:0 auto;background:#fff;min-height:100%;
+    display:flex;flex-direction:column;}
+
+  header{background:var(--primary);color:#fff;padding:10px 16px;
+    display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 8px;border-bottom:2px solid var(--accent);}
+  header h1{font-size:1.05em;font-weight:700;}
+  header .sub{font-size:.72em;opacity:.85;}
+  header .disclaimer{flex-basis:100%;font-size:.66em;line-height:1.3;opacity:.75;
+    font-weight:400;color:#FBD38D;cursor:pointer;text-decoration:underline;
+    text-decoration-color:rgba(251,211,141,.4);text-underline-offset:2px;}
+  header .disclaimer:hover{opacity:1;}
+  header .help-btn{margin-left:auto;align-self:center;flex:0 0 auto;
+    width:26px;height:26px;border-radius:50%;border:1.5px solid rgba(255,255,255,.6);
+    background:transparent;color:#fff;font-weight:700;font-size:.95em;line-height:1;
+    cursor:pointer;}
+  header .help-btn:hover{background:rgba(255,255,255,.15);}
+
+  .dial-area{padding:10px 12px 4px;display:flex;flex-direction:column;align-items:center;}
+  .diagram-wrap{position:relative;width:100%;max-width:min(98vw,688px);aspect-ratio:1;}
+  svg#dial{display:block;width:100%;height:100%;touch-action:none;user-select:none;}
+
+  /* configuration patches: angular = point of sail, radial = TWS band.
+     Inactive configs show as faint band outlines; the one(s) the puck is
+     inside light up (bold outline + soft-filled optimal sub-band). */
+  .ring path{transition:fill-opacity .12s,stroke-opacity .12s;
+    fill-opacity:0;stroke-opacity:0;stroke-width:1.2;stroke-linejoin:round;}
+  .ring .buf{stroke-opacity:.35;}
+  .ring.match .buf{stroke-opacity:.9;stroke-width:1.8;}
+  .ring.match .swt{fill-opacity:.32;stroke-opacity:.9;stroke-width:2;}
+  .ring.match.optimal .swt{fill-opacity:.44;}
+  #ringLayer.showall .ring .buf{stroke-opacity:.6;}
+  .ring.excluded{opacity:.12;}
+
+  /* hover / press on a card isolates that config on the dial */
+  .card{touch-action:none;}
+  .cards.focusing .card.on:not(.focus){opacity:.35;}
+  #ringLayer.focusing .ring{opacity:.06;}
+  #ringLayer.focusing .ring.focus{opacity:1;}
+  .ring.focus .buf{stroke-opacity:.95;stroke-width:2;}
+  .ring.focus .swt{fill-opacity:.42;stroke-opacity:.95;stroke-width:2;}
+
+  /* chevrons are animated via requestAnimationFrame in JS */
+  #puck{cursor:grab;}
+  .puckBody{transform-box:fill-box;transform-origin:center;
+    animation:puckBreath 2.6s ease-in-out infinite;}
+  @keyframes puckBreath{0%,100%{transform:scale(1);}50%{transform:scale(1.06);}}
+  .puckPulse{transform-box:fill-box;transform-origin:center;
+    animation:puckPulse 2.6s ease-out infinite;}
+  @keyframes puckPulse{0%{transform:scale(1);opacity:.45;}
+    70%{opacity:0;}100%{transform:scale(1.75);opacity:0;}}
+
+  .controlbar{display:flex;align-items:center;flex-wrap:wrap;gap:8px 10px;padding:8px 14px 0;}
+  .cb-side{flex:1 1 0;display:flex;align-items:center;gap:8px;min-width:0;}
+  .cb-right{justify-content:flex-start;}
+  .cb-center{display:flex;gap:10px;align-items:center;font-size:.85em;}
+  .bft{text-align:left;line-height:1.1;display:flex;flex-direction:column;}
+  .bft .bl{font-size:.62em;text-transform:uppercase;letter-spacing:.03em;
+    color:#a0aec0;font-weight:700;}
+  .bft .bv{font-size:.82em;color:var(--primary);font-weight:600;white-space:nowrap;}
+  .chip{background:var(--light);border:1px solid var(--border);border-radius:999px;
+    padding:4px 12px;font-weight:600;color:var(--primary);white-space:nowrap;
+    min-width:98px;text-align:center;}   /* fixed width so values don't resize the chip */
+  .chip b{color:var(--secondary);}
+
+  .toggle{display:inline-flex;align-items:center;gap:6px;font-size:.78em;font-weight:600;
+    padding:5px 11px;border-radius:999px;border:1.5px solid var(--border);
+    background:#fff;color:#718096;cursor:pointer;}
+  .toggle svg{flex:0 0 auto;}
+  .toggle.on{background:var(--secondary);border-color:var(--secondary);color:#fff;}
+  #nightBtn.on{background:var(--primary);border-color:var(--primary);color:#fff;}
+  .hint{font-size:.72em;color:#718096;text-align:center;margin-top:4px;}
+
+  /* SAILS column floats at the bottom-right of the control bar, rising upward, so it
+     doesn't push the cards down. Its bottom aligns with the AWA/TWS/Interactive row. */
+  .controlbar{position:relative;padding:8px 14px;align-items:flex-end;}   /* symmetric → AWA/TWS center on the diagram centre */
+  .sails-wrap{position:absolute;right:14px;bottom:8px;display:flex;flex-direction:column;
+    align-items:center;gap:3px;}
+  .collbl{font-size:.62em;text-transform:uppercase;letter-spacing:.03em;color:#a0aec0;
+    font-weight:700;text-align:center;cursor:pointer;}
+  .collbl:hover{color:var(--secondary);}
+  .sails-col{display:flex;flex-direction:column;gap:3px;}
+  .sailbtn{width:84px;font-size:.66em;font-weight:600;padding:3px 6px;border-radius:5px;
+    border:1.5px solid var(--border);background:#fff;color:#718096;cursor:pointer;line-height:1.2;}
+  .sailbtn.on{background:var(--secondary);border-color:var(--secondary);color:#fff;}
+  /* --- Mobile: stack the control bar so nothing overlaps on narrow screens --- */
+  @media(max-width:560px){
+    .controlbar{flex-direction:column;align-items:center;gap:10px;}
+    .cb-side,.cb-center{flex:0 0 auto;width:auto;justify-content:center;}
+    .cb-right{flex-direction:column;gap:8px;}
+    .sails-wrap{position:static;}
+    .sails-col{flex-direction:row;flex-wrap:wrap;justify-content:center;gap:4px;}
+    .sailbtn{width:auto;min-width:64px;}
+  }
+
+  /* plan-detail window (replaces the area below the diagram) */
+  .detail{display:none;flex-direction:column;margin:8px 14px 16px;border:1px solid var(--border);
+    border-radius:8px;overflow:hidden;box-shadow:0 4px 12px rgba(0,0,0,.10);min-height:340px;}
+  .detail.show{display:flex;}
+  .detail-hd{display:flex;align-items:center;gap:8px;padding:9px 12px;color:#fff;
+    font-weight:700;font-size:.95em;background:var(--primary);}
+  .detail-hd .tag{font-size:.62em;font-weight:700;text-transform:uppercase;color:var(--primary);
+    background:#fff;padding:2px 7px;border-radius:3px;}
+  .detail-hd .sub2{font-weight:400;opacity:.82;}
+  .detail-hd .dx{margin-left:auto;border:none;background:rgba(255,255,255,.18);color:#fff;
+    width:24px;height:24px;border-radius:50%;font-size:1.1em;line-height:1;cursor:pointer;}
+  .detail-body{padding:14px 16px;overflow-y:auto;}
+  .detail-body p{font-size:.86em;color:#4a5568;margin:8px 0;}
+  .detail-body .lbl{font-weight:700;color:var(--primary);}
+  .detail-body .sails{font-size:.82em;font-weight:600;color:var(--primary);background:#EDF2F7;
+    border-radius:4px;padding:7px 9px;margin:4px 0 10px;}
+  .detail-body .sr{font-size:.78em;font-weight:600;color:#718096;margin-top:4px;}
+  .detail-body .srow{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap;}
+  .detail-body .sweet{font-size:.78em;font-weight:600;color:#718096;text-align:right;}
+  .detail-body .warn{font-size:.83em;background:#FFF5F5;border-left:4px solid var(--danger);
+    color:#9B2C2C;padding:9px 11px;border-radius:4px;margin-top:10px;}
+  .detail-body .reef{font-size:.83em;background:#EBF8FF;border-left:4px solid var(--secondary);
+    color:#2C5282;padding:9px 11px;border-radius:4px;margin-top:10px;}
+  .detail-body .range{font-size:.78em;color:#718096;margin-top:10px;font-weight:600;}
+
+  /* Cards: fixed 6-slot grid, no reflow as puck moves */
+  .cards-head{padding:6px 14px 0;font-size:.78em;color:#718096;}
+  .cards-head b{color:var(--primary);}
+  .cards{position:relative;display:grid;grid-template-columns:repeat(3,1fr);
+    grid-auto-rows:124px;gap:8px;padding:8px 14px 16px;}
+  @media(max-width:560px){.cards{grid-template-columns:repeat(2,1fr);}}
+  .card{position:relative;border:1px solid var(--border);border-left:5px solid var(--border);
+    border-radius:6px;padding:8px 10px 9px 10px;background:#fafbfc;overflow:hidden;
+    display:flex;flex-direction:column;cursor:pointer;visibility:hidden;}
+  .card.on{visibility:visible;}
+  .card.optimal{background:#f0fff4;}
+  .card .cname{font-size:.8em;font-weight:700;color:var(--primary);line-height:1.15;
+    display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
+    padding-right:20px;}
+  .card .tag{align-self:flex-start;font-size:.6em;font-weight:700;text-transform:uppercase;
+    letter-spacing:.04em;color:#fff;padding:1px 6px;border-radius:3px;
+    background:var(--secondary);margin:4px 0 3px;}
+  .card .tag.optimal{background:var(--success);}
+  .card .tag.accent,.sheet .tag.accent{background:var(--accent);}
+  .card .tag.danger,.sheet .tag.danger{background:var(--danger);}
+  .card .tag.muted,.sheet .tag.muted{background:#718096;}
+  .card .setup{font-size:.72em;color:#4a5568;line-height:1.25;
+    display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+  .card .sun{position:absolute;top:5px;right:5px;width:15px;height:15px;color:#DD6B20;}
+  .card .gear{position:absolute;top:5px;right:5px;width:15px;height:15px;color:#4A5568;}
+  .card .ranges{display:grid;grid-template-columns:repeat(3,1fr);gap:1px 6px;
+    margin-top:auto;padding-top:5px;border-top:1px solid var(--border);}
+  .card .ranges>div{display:flex;flex-direction:column;line-height:1.1;min-width:0;}
+  .card .rl{font-size:.55em;text-transform:uppercase;letter-spacing:.03em;
+    color:#a0aec0;font-weight:700;}
+  .card .rv{font-size:.68em;color:#4a5568;font-weight:600;white-space:nowrap;}
+  .card .rv.opt{color:var(--success);}
+  .empty-msg{position:absolute;inset:0;display:none;align-items:center;justify-content:center;
+    text-align:center;color:#a0aec0;font-size:.85em;padding:20px;}
+  .cards.none .empty-msg{display:flex;}
+
+  /* Overlay */
+  .overlay{position:fixed;inset:0;background:rgba(26,54,93,.55);display:none;
+    align-items:center;justify-content:center;padding:16px;z-index:20;}
+  .overlay.show{display:flex;}
+  .sheet{background:#fff;border-radius:10px;max-width:460px;width:100%;
+    max-height:86vh;overflow-y:auto;padding:18px 18px 22px;border-top:5px solid;}
+  .sheet h2{font-size:1.05em;color:var(--primary);display:flex;align-items:center;gap:8px;
+    margin-bottom:6px;padding-right:26px;}
+  .sheet .tag{font-size:.62em;font-weight:700;text-transform:uppercase;color:#fff;
+    padding:2px 7px;border-radius:3px;background:var(--secondary);}
+  .sheet .tag.optimal{background:var(--success);}
+  .sheet .sails{font-size:.8em;font-weight:600;color:var(--primary);background:#EDF2F7;
+    border-radius:4px;padding:6px 8px;margin:8px 0;}
+  .sheet p{font-size:.85em;color:#4a5568;margin:8px 0;}
+  .sheet p .lbl{font-weight:700;color:var(--primary);}
+  .sheet .warn{font-size:.82em;background:#FFF5F5;border-left:4px solid var(--danger);
+    color:#9B2C2C;padding:9px 11px;border-radius:4px;margin-top:10px;}
+  .sheet .range{font-size:.76em;color:#718096;margin-top:10px;font-weight:600;}
+  .sheet .close{position:absolute;top:0;right:0;}
+  .sheet-hd{position:relative;}
+  .x{position:absolute;top:-4px;right:-2px;border:none;background:none;font-size:1.4em;
+    color:#a0aec0;cursor:pointer;line-height:1;padding:4px;}
+  .dot{width:11px;height:11px;border-radius:3px;flex-shrink:0;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Sail Plan Selector</h1>
+    <span class="sub">S/V Pelican · Island Packet 370</span>
+    <button class="help-btn" id="helpBtn" aria-label="Help and disclaimer" title="Help &amp; disclaimer">?</button>
+    <span class="disclaimer" id="discBtn" role="button" tabindex="0">⚠ For educational use only — not for real-world sailing decisions.</span>
+  </header>
+
+  <div class="dial-area">
+    <div class="diagram-wrap">
+      <svg id="dial" viewBox="0 0 540 540" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="270" cy="270" r="235" fill="none" stroke="#E2E8F0" stroke-width="1"/>
+        <!-- In-irons / no-go wedge (0° ±35°) -->
+        <path d="M270,270 L135.21,77.50 A235,235 0 0 1 404.79,77.50 Z"
+              fill="#9B2C2C" opacity="0.07"/>
+        <text id="posLabel" x="270" y="104" text-anchor="middle" font-family="sans-serif"
+              font-size="10" font-weight="700" fill="var(--secondary)"></text>
+        <text id="nogoLabel" x="270" y="120" text-anchor="middle" font-family="sans-serif"
+              font-size="10" font-weight="700" fill="#9B2C2C" opacity="0.55">NO-GO ±35°</text>
+
+        <!-- radial point-of-sail spokes (below the patches) -->
+        <g stroke="#CBD5E0" stroke-width="1" stroke-dasharray="2,3">
+          <line x1="270" y1="35" x2="270" y2="505"/>
+          <line x1="35" y1="270" x2="505" y2="270"/>
+          <line x1="135" y1="77" x2="405" y2="463"/>
+          <line x1="66" y1="152" x2="474" y2="388"/>
+          <line x1="63" y1="385" x2="477" y2="155"/>
+          <line x1="122" y1="449" x2="418" y2="91"/>
+        </g>
+        <!-- configuration patches: angular = point of sail, radial = TWS band (built in JS) -->
+        <g id="ringLayer"></g>
+        <!-- wind-speed (radial) grid + kt labels, drawn above the patches -->
+        <g id="speedRings" fill="none" stroke="#CBD5E0" stroke-width="1" stroke-dasharray="3,4"></g>
+
+        <g transform="translate(270,270) scale(0.66)">
+          <path d="M0,-55 C14,-22 18,22 14,65 C8,80 -8,80 -14,65 C-18,22 -14,-22 0,-55 Z" fill="#4A5568" stroke="#1A202C" stroke-width="1"/>
+          <line x1="0" y1="-25" x2="0" y2="25" stroke="#fff" stroke-width="2.5"/>
+        </g>
+
+        <g font-family="sans-serif" font-size="10" font-weight="700" fill="#4A5568">
+          <path id="arrow0" d="M270,14 L265,24 L275,24 Z" fill="#9B2C2C"/>
+          <text id="lbl0" x="270" y="9" fill="#9B2C2C" text-anchor="middle" font-size="10">WIND 0°</text>
+          <text id="lbl90r" x="512" y="274" text-anchor="start">90°</text>
+          <text id="lbl90l" x="28" y="274" text-anchor="end">90°</text>
+          <text id="lbl180" x="270" y="524" text-anchor="middle">180°</text>
+        </g>
+
+        <g id="angleRays" font-family="sans-serif" font-size="15" font-weight="700" fill="var(--secondary)">
+          <line id="angleRay1" x1="270" y1="270" x2="270" y2="35" stroke="var(--secondary)" stroke-width="1.5" opacity="0.5"/>
+          <text id="angleLabel1" x="270" y="270" text-anchor="middle">100°</text>
+          <line id="angleRay2" x1="270" y1="270" x2="270" y2="35" stroke="var(--secondary)" stroke-width="1.5" opacity="0.5" style="display:none"/>
+          <text id="angleLabel2" x="270" y="270" text-anchor="middle" style="display:none">100°</text>
+        </g>
+        <g id="puckGroup">
+          <line id="puckLine" x1="270" y1="270" x2="270" y2="200" stroke="var(--secondary)" stroke-width="2" opacity="0.25"/>
+          <g id="puckChevrons"></g>
+          <g id="puck" transform="translate(270,200)">
+            <circle class="puckPulse" r="17" fill="none" stroke="var(--secondary)" stroke-width="2.5"/>
+            <g class="puckBody">
+              <circle r="17" fill="var(--secondary)" stroke="#fff" stroke-width="3"/>
+              <g transform="translate(-10,-10) scale(0.84)" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12.8 19.6A2 2 0 1 0 14 16H2"/><path d="M17.5 8a2.5 2.5 0 1 1 2 4H2"/><path d="M9.8 4.4A2 2 0 1 1 11 8H2"/>
+              </g>
+            </g>
+          </g>
+        </g>
+        <g id="puckGroup2" style="display:none">
+          <line id="puckLine2" x1="270" y1="270" x2="270" y2="200" stroke="var(--secondary)" stroke-width="2" opacity="0.25"/>
+          <g id="puckChevrons2"></g>
+          <g id="puck2" transform="translate(270,200)">
+            <circle class="puckPulse" r="17" fill="none" stroke="var(--secondary)" stroke-width="2.5"/>
+            <g class="puckBody">
+              <circle r="17" fill="var(--secondary)" stroke="#fff" stroke-width="3"/>
+              <g transform="translate(-10,-10) scale(0.84)" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12.8 19.6A2 2 0 1 0 14 16H2"/><path d="M17.5 8a2.5 2.5 0 1 1 2 4H2"/><path d="M9.8 4.4A2 2 0 1 1 11 8H2"/>
+              </g>
+            </g>
+          </g>
+        </g>
+      </svg>
+    </div>
+
+  </div>
+
+  <div class="lower" id="lower">
+  <div class="controlbar">
+    <div class="cb-side cb-left">
+      <button id="interBtn" class="toggle on" aria-pressed="true">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.8 19.6A2 2 0 1 0 14 16H2"/><path d="M17.5 8a2.5 2.5 0 1 1 2 4H2"/><path d="M9.8 4.4A2 2 0 1 1 11 8H2"/></svg><span>Interactive</span>
+      </button>
+      <button id="nightBtn" class="toggle" aria-pressed="false">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg><span>Night</span>
+      </button>
+    </div>
+    <div class="cb-center">
+      <div class="chip">AWA <b><span id="angleVal">100</span>°</b></div>
+      <div class="chip">TWS <b><span id="speedVal">12</span> kt</b></div>
+    </div>
+    <div class="cb-side cb-right">
+      <div class="bft"><span class="bl" id="bftForce">Force 4</span><span class="bv" id="bftName">Moderate breeze</span></div>
+      <div class="sails-wrap">
+        <span class="collbl" id="sailsLabel" title="Toggle all sails on/off">Sails</span>
+        <div class="sails-col" id="sailsCol"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="cards" id="cards">
+    <div class="empty-msg" id="emptyMsg"></div>
+  </div>
+  </div>
+
+  <div class="detail" id="detailWin">
+    <div class="detail-hd" id="detailHd"><span id="detailTitle"></span><button class="dx" id="detailClose" aria-label="Close">×</button></div>
+    <div class="detail-body" id="detailBody"></div>
+  </div>
+</div>
+
+<div class="overlay" id="overlay">
+  <div class="sheet" id="sheet"></div>
+</div>
+
+<script>
+const CX=270,CY=270,MINR=34,MAXR=232,MAXSPD=64,POW=0.6;
+const NS='http://www.w3.org/2000/svg';
+
+const configs=[
+ {id:1,name:"Full Working Cutter Mode",short:"Full Working Cutter",color:"var(--c-r1)",sweet:[35,90],buffer:[90,140],tws:[4,20],
+  sails:"Full Main + 100% Genoa + Full Staysail",
+  desc:"Baseline offshore rig. The genoa is primary power while the inner staysail on the self-tacking Hoyt boom accelerates boundary-layer air across the back of the main for maximum slot efficiency (~0.4 kt over 2-sail on a beam reach in 12 kt).",
+  ops:"Hoist main, center the traveler. Unfurl genoa and sheet to your point of sail, then unfurl the staysail. Set the Hoyt outhaul for a flat foot.",
+  warn:"Past 90° AWA the genoa and main blanket the staysail — it collapses and slats. Roll it away."},
+ {id:2,name:"Light-Air Reaching Slot",short:"Light-Air Reaching",color:"var(--c-r2)",sweet:[40,90],buffer:[90,150],tws:[5,18],
+  sails:"Full Main + 100% Genoa (staysail furled)",
+  desc:"In ultra-light air at wider reaching angles the staysail chokes the main slot and stalls both headsails, so it is rolled away.",
+  ops:"Drop the traveler to leeward to open the slot. Furl the staysail fully. Ease the genoa to keep luff flow and play the mainsheet for helm balance.",
+  warn:"Pinching under 40° loses lift and slides sideways; falling past 150° collapses the genoa behind the main."},
+ {id:3,name:"Balanced Heavy Weather Reach",short:"Heavy Weather Reach",color:"var(--c-r3)",sweet:[35,50],buffer:[50,90],tws:[21,40],
+  sails:"Reefed Main + Full Staysail (genoa furled)",
+  desc:"For true wind in the high 20s. Furl the genoa; the staysail keeps a low, forward center of effort so the helm balances on a knife edge upwind. Keep heel under 15–18°.",
+  ops:"Furl the genoa completely. Drop to Reef 1 or 2 and haul the reef lines tight. The Hoyt boom self-tends the staysail through tacks.",
+  warn:"Pushed dead downwind the small sail area can't damp swell — expect heavy rolling."},
+ {id:4,name:"Boomless Running Configuration",short:"Boomless Running",color:"var(--c-r4)",sweet:[130,160],buffer:[120,130],tws:[15,30],
+  sails:"Full Genoa + Full Staysail (main dropped)",
+  desc:"Safe heavy-swell broad reaching to a moderate run. Dropping the main removes accidental-gybe risk while twin headsails stay loaded and stable. The staysail rides the rigid Hoyt boom; the genoa draws on the leeward side.",
+  ops:"Drop the main into the stack pack and strap the boom amidships. Fly both headsails; the staysail is naturally poled by the Hoyt boom, the genoa trimmed to leeward.",
+  warn:"Near a dead run (past ~160°) the un-poled genoa blankets behind the staysail and collapses — pole it out to windward (that's Wing-on-Wing #7) or head up. Turning upwind without the main gives massive lee helm; hoist the main first."},
+ {id:5,name:"Light-Air Turbo Reach (Code Zero)",short:"Code Zero Reach",color:"var(--c-r5)",sweet:[60,110],buffer:[52,135],tws:[2,12],
+  sails:"Full Main + Code Zero (working headsails furled)",
+  desc:"For when dacron won't move the hull. The flat-cut Code Zero on its own continuous-line furler adds light-air horsepower under 12 kt.",
+  ops:"Hoist the furled sail on the spinnaker halyard and tension hard on the anti-torsion cable. Furl working headsails, unroll via the furling line; traveler down, main eased.",
+  warn:"Roll it away the moment wind tops 12 kt and never leave it up overnight in unsettled weather. Below 50° AWA overloads the torsion cable."},
+ {id:6,name:"Deep Reaching Powerhouse (Asymmetric)",short:"Asymmetric Run",color:"var(--c-r6)",sweet:[110,160],buffer:[95,110],tws:[4,15],
+  sails:"Eased Main + Asymmetric Spinnaker (headsails furled)",
+  desc:"Broad-reach workhorse. Full-cut nylon gives huge off-wind lift (~1.3–1.5 kt gain at 150° in 12 kt). Ease the main to the shrouds with a preventer.",
+  ops:"Tack to the bow, hoist in the snuffer sock. Bear to a broad reach, raise the sock and trim the sheet. Rig a boom preventer.",
+  warn:"Below 95° AWA is a mandatory drop — the chute overpowers the main and rounds up into a broach. Snuff before sunset; never fly shorthanded at night."},
+ {id:7,name:"Double Downwind Slot (Wing-on-Wing)",short:"Wing-on-Wing",color:"var(--c-r7)",sweet:[160,180],buffer:[140,160],tws:[8,25],
+  sails:"Full Main (leeward, prevented) + Poled Genoa (windward)",
+  desc:"The blue-water trade-wind tracking setup. The whisker pole locks the genoa clew to windward while the main is prevented out to leeward.",
+  ops:"Set the Forespar LC pole on the mast track, clip to the genoa sheet and extend via line control. Lock the boom with a preventer.",
+  warn:"A shift forward of 140° backwinds the genoa against the pole and can bend it — drop the pole when angles narrow."},
+ {id:8,name:"Lazy Night Watch (Standalone Genoa)",short:"Standalone Genoa",color:"var(--c-r8)",sweet:[60,120],buffer:[40,150],tws:[10,22],
+  sails:"100% or reefed Genoa only",
+  desc:"Low-stress night config — stable, quiet and fully adjustable from the cockpit.",
+  ops:"Drop the main and furl the staysail. Fly the genoa sheeted for angle; furl to 80% or 60% as wind builds.",
+  warn:"Close-hauled under headsail alone generates lee helm that works the autopilot and drains batteries."},
+ {id:9,name:"Storm / Gale Survival (Standalone Staysail)",short:"Storm Staysail",color:"var(--c-r9)",sweet:[35,60],buffer:[60,120],tws:[26,45],
+  sails:"Reefed Staysail only",
+  desc:"Survival rig for 25+ kt. The Hoyt boom keeps the staysail flat instead of bagging, giving just enough drive for steerage.",
+  ops:"Strip all other canvas. Unfurl only enough for 2–3 kt of way and haul the Hoyt outhaul very tight. Crew clipped in.",
+  warn:"Under 25 kt this leaves the heavy IP370 wallowing — gale conditions only."},
+ {id:10,name:"Swell Gyro Stabilization (Standalone Main)",short:"Standalone Main",color:"var(--c-r10)",sweet:[45,135],buffer:[35,180],tws:[5,25],
+  sails:"Full or reefed Mainsail only (headsails furled)",
+  desc:"A simple, quick-to-set rig under the main alone. Its standout value is damping the boat's roll and pitch — sheeted near centerline the main acts like a giant gyro, steadying her in a sloppy sea. Handy on a reach when you want the headsails down and life simple, and the go-to setup when motor-sailing into head seas.",
+  ops:"Hoist the main, reefed to suit the wind. For maximum roll-damping in swell, sheet it hard toward centerline (add the engine to hold course into head seas); to actually sail, ease the sheet and steer a reach.",
+  warn:"Main alone carries weather helm and points poorly upwind without a headsail to balance it. Sailing deep past ~120° builds heavy weather helm that can overpower the autopilot — bear off gradually and mind the boom.",
+  drift:"Under sail alone she foots off with some leeway; centerlined with the engine on you hold course with little leeway. Not a windward rig — expect poor VMG upwind."}
+];
+const cfgById={};configs.forEach(c=>cfgById[c.id]=c);
+// Sails the guide says NOT to fly shorthanded at night: Code Zero (5), Asymmetric spinnaker (6).
+const NIGHT_UNSAFE=new Set([5,6]);
+// which physical sails/gear each plan needs — used by the SAILS enable/disable toggles
+// The whisker pole (needed to pole the genoa for wing-on-wing) is a toggleable "sail".
+const REQ={1:['main','genoa','stay'],2:['main','genoa'],3:['main','stay'],4:['genoa','stay'],
+  5:['main','code0'],6:['main','asym'],7:['main','genoa','pole'],8:['genoa'],9:['stay'],10:['main']};
+const SAILS=[['main','Main'],['genoa','Genoa'],['stay','Staysail'],['code0','Code 0'],['asym','Asym'],['pole','Pole']];
+const sailsOn={main:true,genoa:true,stay:true,code0:true,asym:true,pole:true};
+function needsEngine(c){ return !!(REQ[c.id] && REQ[c.id].includes('engine')); }
+
+// Coping tactics — always-available fallbacks so the boat always has "a configuration".
+// These are not point-of-sail rings; they surface as cards when conditions warrant.
+const tactics=[
+ {key:'HTg',name:"Heave-To · Backed Genoa — moderate-air park",short:"⚓ Heave-To · Genoa",color:"#D69E2E",
+  tagName:"Heave-to",tagClass:"accent",
+  sails:"Full or reefed main + backed genoa, helm locked to windward",
+  desc:"The easy, familiar heave-to for light-to-moderate air. Backing the big genoa firmly holds the bow down while the main and rudder balance it up, so she parks ~50–60° off the wind and forereaches slowly. The most common way to stop — to rest, cook, reef, or wait out a passing squall.",
+  ops:"Leave the genoa sheeted and tack slowly WITHOUT releasing the working sheet, so the genoa fills aback against the rig. Ease the main to a close-reach set, then turn the wheel fully to windward and lock the brake; reef the main near the top of the range.",
+  warn:"The big genoa loads up and flogs while you set up and drives her forward faster than the staysail version — as wind builds past ~24 kt switch to the staysail heave-to. You drift to leeward the whole time; keep sea room downwind.",
+  drift:"≈1–1.5 kt to leeward, slightly forward of the beam, leaving a slick to windward. Budget ~10–15 nm over a night."},
+ {key:'HTs',name:"Heave-To · Backed Staysail — heavy air / gale",short:"⚓ Heave-To · Staysail",color:"#B7791F",
+  tagName:"Heave-to",tagClass:"accent",
+  sails:"Reefed main + backed staysail, helm locked to windward",
+  desc:"The cutter's heavy-weather heave-to. The small inner staysail sits low and forward, so backing it keeps the center of effort balanced and controllable without loading a big genoa against the rig. The IP370's full-foil keel heaves-to very steadily — the go-to way to ride out a gale or make repairs in a seaway.",
+  ops:"Reef the main (Reef 2–3 in heavy air) and furl the genoa; set the staysail. Tack slowly WITHOUT releasing the staysail sheet so it fills aback. Ease the main to a close-reach set, turn the wheel fully to windward and lock the brake.",
+  warn:"You drift to leeward the entire time — make sure you have sea room downwind. Watch the backed sheet for chafe. In very steep breaking seas, running off under bare poles can be safer than lying stopped.",
+  drift:"≈1–1.5 kt to leeward (slightly forward of the beam), leaving a protective slick to windward. Budget ~10–15 nm of downwind drift over a night watch."},
+ {key:'HTm',name:"Heave-To · Main Alone — marginal fallback",short:"⚓ Heave-To · Main",color:"#718096",
+  tagName:"Heave-to",tagClass:"muted",
+  sails:"Deep-reefed main only, helm hard to windward — marginal",
+  desc:"Some boats will settle under main alone with the helm lashed down, but with no backed headsail to pin the bow off the wind it is far less reliable — she tends to creep up, luff, fall off and hunt rather than lie quietly. A fallback for when you have no usable headsail, not a first choice. The heavy full-keel IP370 can manage it in a pinch but expect fore-reaching and wander.",
+  ops:"Deep-reef the main (Reef 2–3) and sheet it fairly hard, then turn the wheel fully to windward and lock the brake. Fiddle the mainsheet and helm for the least-hunting balance; if she won't settle, back the staysail or genoa instead.",
+  warn:"Least stable of the heave-to options — she may fore-reach faster and refuse to lie quietly, especially as seas build. If she won't settle, back a headsail or bear away and run off. Keep sea room to leeward.",
+  drift:"Variable — roughly 1–2 kt to leeward with more fore-reaching and wander than the headsail versions."},
+ {key:'BP',name:"Bare Poles — All Sail Down",short:"⛒ Bare Poles",color:"#9B2C2C",
+  tagName:"Bare poles",tagClass:"danger",
+  sails:"All sail down — run off (ideally with a drogue), or lie ahull",
+  desc:"The last-resort storm configuration when wind exceeds what even a reefed staysail can safely carry (roughly 45+ kt), or if sails/gear fail. 'No sails' is still a configuration — windage on the mast, rigging and hull alone drives the boat. Preferred tactic is to run off downwind under control; lying ahull (drifting beam-on, helm lashed) is simpler but rolls the beam to the seas and is a true last resort.",
+  ops:"Drop and lash all canvas. To run off: steer downwind (hand or autopilot) and stream a drogue or a bight of heavy warps astern to slow the boat and stop it surfing / broaching. To lie ahull: lash the helm to leeward and secure below — only in open water without large breaking seas.",
+  warn:"Needs large sea room — the boat can cover 30–60+ nm downwind in a night. A drogue dramatically reduces broach risk. Avoid lying ahull in big breaking seas; keep some steerageway for rudder control.",
+  drift:"Running under bare poles: ≈2–4 kt downwind from windage alone in storm-force wind (more if surfing without a drogue). Lying ahull: ≈1–2 kt to leeward with large leeway, beam to the seas."}
+];
+const byKey={};
+configs.forEach(c=>byKey['c'+c.id]=c);
+tactics.forEach(t=>byKey[t.key]=t);
+// extra leeway notes for the heavy-weather sail configs
+const driftNote={3:"Kept moving, leeway is minor; if you slow below ~3 kt the full keel starts making noticeable leeway. Reef early to hold speed.",
+  4:"Little leeway running deep, but high downwind VMG — watch your closing distance to any lee shore.",
+  9:"Forereaches slowly with ~1–2 kt of leeway; needs sea room to leeward. If seas build past what she can take, go to bare poles."};
+// day / night / shorthanded guidance per plan
+const NITE={
+ 1:"Great daytime power, but three sails demand vigilant sheet management in squalls. For a shorthanded couple at night, drop to Light-Air Reaching (#2) or Standalone Genoa (#8) before sunset.",
+ 2:"Easily handled solo, day or night — less deck clutter and line-handling in the dark than the full cutter.",
+ 3:"A solid multi-day heavy-air passage rig; the self-tacking staysail lets one person tack from the helm, so it's fine at night.",
+ 4:"Excellent shorthanded night setup for a tired couple — an accidental gybe only collapses a headsail, not a swinging boom.",
+ 5:"Daytime only. Never leave a Code Zero up overnight in unsettled weather; furling it loaded in a night squall is dangerous shorthanded.",
+ 6:"Daytime only. Never fly the spinnaker shorthanded at night — snuff it into the sock about 30 minutes before sunset.",
+ 7:"Superb for long trade-wind night runs. At night, slightly furl the genoa to ease pole loads and make emergency furling easier.",
+ 8:"The go-to low-stress night-watch rig — one person adjusts total sail area from the cockpit without waking their partner.",
+ 9:"Survival endurance mode; keep crew clipped in and below or under the dodger. Manageable shorthanded but exhausting.",
+ 10:"Fine day or night — a simple main-only rig; centerlining it to damp roll cuts crew fatigue and seasickness in a messy sea."};
+// reefing schedule per plan across its wind range
+const REEF={
+ 1:"Full main to ~15 kt. Reef 1 at 16–20 kt and roll the genoa toward 80% near the top of the range.",
+ 2:"Full main throughout its light-air range; if it builds past ~18 kt take Reef 1 — you're then into Full Cutter territory.",
+ 3:"Reef 2 at 21–25 kt, Reef 3 by 26–32 kt. Genoa stays furled; staysail full, then reefed above ~33 kt.",
+ 4:"No main. Full genoa + staysail to ~20 kt; furl the genoa toward 60% by 25–30 kt as loads build.",
+ 5:"Full main. The Code Zero has no reef — furl it away completely once wind tops ~12 kt.",
+ 6:"Full or slightly eased main. The spinnaker has no reef — snuff it before it overpowers (~15 kt) or before dark.",
+ 7:"Full main to ~15 kt, Reef 1 by 16–20 kt, Reef 2 by 21–25 kt. Furl the poled genoa a few turns at night or as it builds.",
+ 8:"No main. Genoa full to ~15 kt, roll to 80% by ~18 kt and 60% by ~22 kt.",
+ 9:"No main. Staysail full at 26–33 kt; reef it to a scrap above ~34 kt (gale).",
+ 10:"Full main to ~15 kt, Reef 1 by 16–20 kt, Reef 2 by 21–25 kt — sheeted flat to centerline for damping."};
+// short descriptive subtitle shown after the rig name in the detail header (card name leads)
+const SUBTITLE={
+ 1:"the offshore workhorse", 2:"genoa reaching, staysail furled", 3:"reefed and balanced upwind",
+ 4:"twin headsails, main dropped", 5:"light-air turbo reach", 6:"the downwind powerhouse",
+ 7:"poled-out trade-wind run", 8:"the lazy night watch", 9:"storm and gale survival",
+ 10:"swell gyro stabiliser"};
+
+const svg=document.getElementById('dial');
+const puck=document.getElementById('puck');
+const puckLine=document.getElementById('puckLine');
+const puckChev=document.getElementById('puckChevrons');
+const puckGroup=document.getElementById('puckGroup');
+const puckGroup2=document.getElementById('puckGroup2');
+const puckLine2=document.getElementById('puckLine2');
+const puckChev2=document.getElementById('puckChevrons2');
+const puck2=document.getElementById('puck2');
+const angleRay1=document.getElementById('angleRay1');
+const angleRay2=document.getElementById('angleRay2');
+const angleLabel1=document.getElementById('angleLabel1');
+const angleLabel2=document.getElementById('angleLabel2');
+const posLabel=document.getElementById('posLabel');
+const nogoLabel=document.getElementById('nogoLabel');
+const staticLabels=[
+  {el:document.getElementById('lbl0'),ang:0,side:0},
+  {el:document.getElementById('arrow0'),ang:0,side:0},
+  {el:document.getElementById('lbl90r'),ang:90,side:1},
+  {el:document.getElementById('lbl90l'),ang:90,side:-1},
+  {el:document.getElementById('lbl180'),ang:180,side:0}];
+// Fade a static perimeter label as the moving angle indicator nears it:
+// full opacity ≥10° away, fully hidden ≤5°, linear in between (fixed, not animated).
+function fadeStatic(inds){
+  staticLabels.forEach(L=>{
+    let md=999;
+    inds.forEach(ind=>{ if(L.side!==0&&ind.side!==L.side)return;
+      const d=Math.abs(ind.angle-L.ang); if(d<md)md=d; });
+    L.el.style.opacity = md<=5?0 : (md<10?(md-5)/5 : 1);
+  });
+}
+const angleVal=document.getElementById('angleVal');
+const speedVal=document.getElementById('speedVal');
+const bftForce=document.getElementById('bftForce');
+const bftName=document.getElementById('bftName');
+const cardsEl=document.getElementById('cards');
+const emptyMsg=document.getElementById('emptyMsg');
+const overlay=document.getElementById('overlay');
+const sheet=document.getElementById('sheet');
+const lower=document.getElementById('lower');
+const detailWin=document.getElementById('detailWin');
+const detailHd=document.getElementById('detailHd');
+const detailTitle=document.getElementById('detailTitle');
+const detailBody=document.getElementById('detailBody');
+const detailClose=document.getElementById('detailClose');
+// Build configuration patches: each is an annular sector where the angular
+// extent = point-of-sail arc and the radial extent = its TWS band. Same radius()
+// mapping as the puck, so the puck sitting inside a patch means that config is valid.
+const ringLayer=document.getElementById('ringLayer');
+const groups={};
+function polarPt(a,r,side){const rad=a*Math.PI/180;
+  return (CX+side*r*Math.sin(rad)).toFixed(1)+' '+(CY-r*Math.cos(rad)).toFixed(1);}
+function sector(a1,a2,rIn,rOut,side){
+  const large=(a2-a1)>180?1:0, sOut=side>0?1:0, sIn=side>0?0:1;
+  return 'M '+polarPt(a1,rOut,side)+' A '+rOut+' '+rOut+' 0 '+large+' '+sOut+' '+polarPt(a2,rOut,side)+
+         ' L '+polarPt(a2,rIn,side)+' A '+rIn+' '+rIn+' 0 '+large+' '+sIn+' '+polarPt(a1,rIn,side)+' Z';
+}
+function buildRings(){
+  configs.forEach(c=>{
+    const rIn=radius(c.tws[0]), rOut=radius(c.tws[1]);
+    const lo=Math.min(c.sweet[0],c.buffer[0]), hi=Math.max(c.sweet[1],c.buffer[1]);
+    const g=document.createElementNS(NS,'g');
+    g.setAttribute('class','ring'); g.dataset.ring=c.id;
+    // buffer patch (full arc) on both tacks, then sweet patch (optimal arc) on top
+    [[-1,'buf',lo,hi],[1,'buf',lo,hi],[-1,'swt',c.sweet[0],c.sweet[1]],[1,'swt',c.sweet[0],c.sweet[1]]]
+      .forEach(([side,cls,x1,x2])=>{
+        const p=document.createElementNS(NS,'path');
+        p.setAttribute('class',cls);
+        p.setAttribute('d',sector(x1,x2,rIn,rOut,side));
+        p.style.fill=c.color; p.style.stroke=c.color;
+        g.appendChild(p);
+      });
+    ringLayer.appendChild(g);
+    groups[c.id]=g;
+  });
+}
+buildRings();
+
+// pool of chevrons that stream along the line from the puck to the center
+const CHEV=[];
+for(let i=0;i<12;i++){
+  const p=document.createElementNS(NS,'path');
+  p.setAttribute('fill','none');
+  p.setAttribute('stroke','var(--secondary)');
+  p.setAttribute('stroke-width','2.5');
+  p.setAttribute('stroke-linecap','round');
+  p.setAttribute('stroke-linejoin','round');
+  p.style.display='none';
+  puckChev.appendChild(p);
+  CHEV.push(p);
+}
+// second chevron pool for the mirrored (port) puck in "show all" mode
+const CHEV2=[];
+for(let i=0;i<12;i++){
+  const p=document.createElementNS(NS,'path');
+  p.setAttribute('fill','none');p.setAttribute('stroke','var(--secondary)');
+  p.setAttribute('stroke-width','2.5');p.setAttribute('stroke-linecap','round');
+  p.setAttribute('stroke-linejoin','round');p.style.display='none';
+  puckChev2.appendChild(p);CHEV2.push(p);
+}
+const CHEV_SPACING=20, CHEV_START=17, CHEV_END=15;   // px along the line
+let chevPhase=0, chevLast=0, mirror=false;
+
+// card slot pool (created once). Interactive mode uses the first 6 as fixed cells
+// (no reflow as the puck moves); "show all" mode fills up to 10.
+const slots=[];
+for(let i=0;i<10;i++){
+  const d=document.createElement('div');
+  d.className='card';
+  d.innerHTML='<div class="cname"></div><span class="tag"></span><div class="setup"></div>'+
+    '<div class="ranges">'+
+      '<div><span class="rl">Optimal</span><span class="rv opt"></span></div>'+
+      '<div><span class="rl">Safe</span><span class="rv safe"></span></div>'+
+      '<div><span class="rl">Wind</span><span class="rv wind"></span></div>'+
+    '</div>'+
+    '<svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+
+    '<circle cx="12" cy="12" r="4"/>'+
+    '<path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M6.3 17.7l-1.4 1.4M19.1 4.9l-1.4 1.4"/></svg>'+
+    '<svg class="gear" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+
+    '<circle cx="12" cy="12" r="3"/>'+
+    '<path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>';
+  cardsEl.appendChild(d);
+  slots.push({el:d,name:d.querySelector('.cname'),tag:d.querySelector('.tag'),
+    setup:d.querySelector('.setup'),sun:d.querySelector('.sun'),gear:d.querySelector('.gear'),
+    opt:d.querySelector('.rv.opt'),safe:d.querySelector('.rv.safe'),wind:d.querySelector('.rv.wind')});
+}
+
+// wind-speed guide circles
+(function(){
+  const g=document.getElementById('speedRings');
+  [10,20,35,50,64].forEach(kt=>{
+    const r=radius(kt);
+    const c=document.createElementNS(NS,'circle');
+    c.setAttribute('cx',CX);c.setAttribute('cy',CY);c.setAttribute('r',r.toFixed(1));g.appendChild(c);
+    const t=document.createElementNS(NS,'text');
+    t.setAttribute('x',CX+4);t.setAttribute('y',(CY-r+11).toFixed(1));
+    t.setAttribute('font-size','8');t.setAttribute('fill','#A0AEC0');t.textContent=kt+'kt';g.appendChild(t);
+  });
+})();
+
+let state={angle:100,speed:12};
+let puckState={r:radius(12),tws:12};
+let interactive=true, night=false;
+
+// non-linear (power) mapping so low wind speeds get more radial room
+function radius(sp){return MINR+(MAXR-MINR)*Math.pow(Math.max(0,sp)/MAXSPD,POW);}
+
+function movePuck(px,py){
+  puck.setAttribute('transform','translate('+px+','+py+')');
+  puckLine.setAttribute('x2',px);puckLine.setAttribute('y2',py);
+  const bearing=Math.atan2(CY-py,CX-px)*180/Math.PI;   // +x axis toward center
+  puckChev.setAttribute('transform','translate('+px+','+py+') rotate('+bearing+')');
+  puckState.r=Math.hypot(px-CX,py-CY);
+}
+
+function placeInitial(angle,speed){
+  const r=radius(speed),rad=angle*Math.PI/180;
+  movePuck(CX+r*Math.sin(rad),CY-r*Math.cos(rad));
+  puckState.tws=speed;
+}
+function movePuck2(px,py){
+  puck2.setAttribute('transform','translate('+px+','+py+')');
+  puckLine2.setAttribute('x2',px);puckLine2.setAttribute('y2',py);
+  const bearing=Math.atan2(CY-py,CX-px)*180/Math.PI;
+  puckChev2.setAttribute('transform','translate('+px+','+py+') rotate('+bearing+')');
+}
+function placePuck2(angle,speed){
+  const r=radius(speed),rad=angle*Math.PI/180;
+  movePuck2(CX-r*Math.sin(rad),CY-r*Math.cos(rad));
+}
+// radial angle ray + degree label just outside the perimeter (font 1.5x the tick labels)
+function setRay(line,label,angle,side){
+  const rad=angle*Math.PI/180;
+  line.setAttribute('x2',(CX+side*235*Math.sin(rad)).toFixed(1));
+  line.setAttribute('y2',(CY-235*Math.cos(rad)).toFixed(1));
+  label.setAttribute('x',(CX+side*256*Math.sin(rad)).toFixed(1));
+  label.setAttribute('y',(CY-256*Math.cos(rad)+5).toFixed(1));
+  label.textContent=Math.round(angle)+'°';
+}
+function updateRays(angle,dual,side){
+  side=side||1;
+  setRay(angleRay1,angleLabel1,angle,side);
+  angleRay1.style.display='';angleLabel1.style.display='';
+  if(dual){ setRay(angleRay2,angleLabel2,angle,-side);
+    angleRay2.style.display='';angleLabel2.style.display=''; }
+  else { angleRay2.style.display='none';angleLabel2.style.display='none'; }
+}
+function hideRays(){
+  angleRay1.style.display='none';angleLabel1.style.display='none';
+  angleRay2.style.display='none';angleLabel2.style.display='none';
+  updatePOS(null);
+}
+// point-of-sail name at the top of the dial; the NO-GO ±35° label shows only
+// while the puck is in the no-go wedge, otherwise the point-of-sail name shows.
+function pointOfSail(a){
+  if(a<35) return 'In Irons';
+  if(a<60) return 'Close Hauled';
+  if(a<80) return 'Close Reach';
+  if(a<100) return 'Beam Reach';
+  if(a<150) return 'Broad Reach';
+  return 'Running';
+}
+function updatePOS(a){
+  if(a==null){ posLabel.style.display='none'; nogoLabel.style.display=''; return; }
+  posLabel.textContent=pointOfSail(a);
+  posLabel.style.display='';
+  nogoLabel.style.display = a<35 ? '' : 'none';
+}
+
+// chevron train: flows from puck (x=0) toward center (x=r), pointing at center,
+// centered on the line, widening with TWS. Driven by rAF so it tracks the puck live.
+function animateChevrons(ts){
+  const dt=chevLast?ts-chevLast:16; chevLast=ts;
+  chevPhase=(chevPhase+dt*0.032)%CHEV_SPACING;      // ~32 px/s toward center
+  const r=puckState.r, span=r-CHEV_START-CHEV_END;
+  const h=3+(puckState.tws/MAXSPD)*8;               // half-width grows with wind
+  const w=h*0.85;
+  const d='M0,'+(-h).toFixed(1)+' L'+w.toFixed(1)+',0 L0,'+h.toFixed(1);
+  const count=span>4?Math.min(CHEV.length,Math.ceil(span/CHEV_SPACING)+1):0;
+  for(let k=0;k<CHEV.length;k++){
+    const el=CHEV[k], el2=CHEV2[k];
+    if(k>=count){el.style.display='none';el2.style.display='none';continue;}
+    const local=(k*CHEV_SPACING+chevPhase)%span;    // 0..span
+    const x=CHEV_START+local;
+    const op=Math.max(0,Math.min(1,local/10,(span-local)/10));
+    const tf='translate('+x.toFixed(1)+',0)';
+    el.setAttribute('transform',tf);el.setAttribute('d',d);el.style.opacity=op;el.style.display='';
+    if(mirror){el2.setAttribute('transform',tf);el2.setAttribute('d',d);el2.style.opacity=op;el2.style.display='';}
+    else el2.style.display='none';
+  }
+  requestAnimationFrame(animateChevrons);
+}
+requestAnimationFrame(animateChevrons);
+
+function matchInfo(c,a,s){
+  const inSpeed=s>=c.tws[0]&&s<=c.tws[1];
+  const lo=Math.min(c.sweet[0],c.buffer[0]),hi=Math.max(c.sweet[1],c.buffer[1]);
+  return {visible:inSpeed&&a>=lo&&a<=hi, optimal:inSpeed&&a>=c.sweet[0]&&a<=c.sweet[1]};
+}
+
+// Beaufort force + descriptive name from true wind speed (knots)
+const BFT=[[1,0,'Calm'],[4,1,'Light air'],[7,2,'Light breeze'],[11,3,'Gentle breeze'],
+  [17,4,'Moderate breeze'],[22,5,'Fresh breeze'],[28,6,'Strong breeze'],[34,7,'Near gale'],
+  [41,8,'Gale'],[48,9,'Strong gale'],[56,10,'Storm'],[64,11,'Violent storm']];
+function updateBeaufort(kt){
+  let f=12,name='Hurricane';
+  for(const [lim,ff,nm] of BFT){ if(kt<lim){ f=ff; name=nm; break; } }
+  bftForce.textContent='Force '+f;
+  bftName.textContent=name;
+}
+
+const TAC_TWS={HTg:'8–24 kt',HTs:'20–45 kt',HTm:'12–35 kt',BP:'40+ kt'};
+function tCard(key,rank){
+  const t=byKey[key];
+  return {key,color:t.color,short:t.short,nightOk:true,engine:false,setup:t.sails,tagText:t.tagName,tagClass:t.tagClass,
+    tws:TAC_TWS[key],opt:'—',safe:'—',rank,ord:99};
+}
+
+function sailOk(c){ return REQ[c.id] ? REQ[c.id].every(s=>sailsOn[s]) : true; }
+function allowed(c){ return (!night || !NIGHT_UNSAFE.has(c.id)) && sailOk(c); }
+
+function fillSlot(slot,d){
+  slot.el.style.display='';
+  slot.el.classList.add('on');
+  slot.el.classList.toggle('optimal',d.tagClass==='optimal');
+  slot.el.style.borderLeftColor=d.color;
+  slot.name.textContent=d.short;
+  slot.tag.textContent=d.tagText||'';
+  slot.tag.style.display=d.tagText?'':'none';
+  slot.tag.className='tag'+(d.tagClass?(' '+d.tagClass):'');
+  slot.setup.textContent=d.setup;
+  slot.opt.textContent=d.opt;
+  slot.safe.textContent=d.safe;
+  slot.wind.textContent=d.tws;
+  slot.sun.style.display=d.nightOk?'none':'';   // sun = daytime-only (not for shorthanded night)
+  slot.gear.style.display=d.engine?'':'none';   // gear = requires the engine
+  slot.el.dataset.key=d.key;
+}
+// Fill `list` into the slots; keep `cells` grid cells present (unused ones stay
+// as invisible placeholders so the layout doesn't reflow), hide the rest.
+function renderCards(list,cells){
+  for(let i=0;i<slots.length;i++){
+    const slot=slots[i];
+    if(i>=cells){slot.el.style.display='none';slot.el.classList.remove('on','optimal','focus');slot.el.dataset.key='';continue;}
+    slot.el.style.display='';
+    if(i<list.length) fillSlot(slot,list[i]);
+    else{slot.el.classList.remove('on','optimal','focus');slot.el.dataset.key='';}
+  }
+}
+
+function update(){
+  const a=state.angle,s=state.speed;
+  angleVal.textContent=a;
+  speedVal.textContent=s;
+  updateBeaufort(s);
+
+  // all patches stay visible (dim); valid ones light up, night-excluded ones fade
+  configs.forEach(c=>{
+    const m=matchInfo(c,a,s), ok=allowed(c), g=groups[c.id];
+    g.classList.toggle('match',m.visible&&ok);
+    g.classList.toggle('optimal',m.optimal&&ok);
+    g.classList.toggle('excluded',!ok);
+    if(m.visible&&ok) ringLayer.appendChild(g);
+  });
+
+  const list=[];
+  configs.forEach(c=>{
+    const m=matchInfo(c,a,s);
+    if(m.visible&&allowed(c))
+      list.push({key:'c'+c.id,color:c.color,short:(c.short||c.name),nightOk:!NIGHT_UNSAFE.has(c.id),engine:needsEngine(c),
+        setup:c.sails,tagText:m.optimal?'✓ Optimal':'Safe',tagClass:m.optimal?'optimal':'',
+        tws:c.tws[0]+'–'+c.tws[1]+' kt',
+        opt:c.sweet[0]+'–'+c.sweet[1]+'°',
+        safe:Math.min(c.sweet[0],c.buffer[0])+'–'+Math.max(c.sweet[1],c.buffer[1])+'°',
+        rank:m.optimal?1:3,ord:c.id});
+  });
+  // heave-to, bare poles and other no-drive options always sort LAST (high rank)
+  // heave-to variants — different sail sets for different wind bands (all sort after the sail plans)
+  if(s>=8  && s<=24 && sailsOn.main && sailsOn.genoa) list.push(tCard('HTg',7));   // backed genoa — moderate air
+  if(s>=20 && sailsOn.main && sailsOn.stay)           list.push(tCard('HTs',8));   // backed staysail — heavy air / gale
+  if(s>=12 && s<=35 && sailsOn.main)                  list.push(tCard('HTm',8.5)); // deep-reefed main alone — marginal fallback
+  if(s>=40)  list.push(tCard('BP',9));
+  if(list.length===0) list.push(tCard('BP',9));   // nothing else set → bare poles / adrift
+
+  list.sort((x,y)=>x.rank-y.rank||x.ord-y.ord);
+  renderCards(list.slice(0,6),6);
+}
+
+// Plan details open as an inline "window" that replaces the area below the diagram,
+// keeping that plan's curve highlighted on the dial while it's up.
+function openSheet(key){
+  const c=byKey[key]; if(!c) return;
+  const isSail=!!c.sweet;
+  let tag,tagClass;
+  if(isSail){
+    const m=matchInfo(c,state.angle,state.speed);
+    tag=m.optimal?'Optimal':(m.visible?'Safe':'Off range');
+    tagClass=m.optimal?'optimal':'';
+  }else{ tag=c.tagName; tagClass=c.tagClass; }
+  const drift=c.drift||(isSail?driftNote[c.id]:'');
+  detailHd.style.background=c.color;
+  const subt = isSail ? (SUBTITLE[c.id]||'') : (c.name.split(' — ')[1]||'');   // card name leads, descriptor follows
+  detailTitle.innerHTML='<b>'+(c.short||c.name)+'</b>'+(subt?' <span class="sub2">— '+subt+'</span>':'')+
+    ' <span class="tag '+tagClass+'">'+tag+'</span>';
+  let html='<div class="sails"><div class="srow"><span>'+c.sails+'</span>';
+  if(isSail) html+='<span class="sweet">Sweet spot '+c.sweet[0]+'–'+c.sweet[1]+'° · Safe '+
+    Math.min(c.sweet[0],c.buffer[0])+'–'+Math.max(c.sweet[1],c.buffer[1])+'° · TWS '+c.tws[0]+'–'+c.tws[1]+' kt</span>';
+  html+='</div>';
+  if(drift) html+='<div class="sr"><span class="lbl">Drift / leeway:</span> '+drift+'</div>';
+  html+='</div>'+
+    '<p>'+c.desc+'</p>'+
+    '<p><span class="lbl">Setup:</span> '+c.ops+'</p>';
+  if(isSail&&NITE[c.id]) html+='<p><span class="lbl">Day / night / shorthanded:</span> '+NITE[c.id]+'</p>';
+  if(isSail&&REEF[c.id]) html+='<div class="reef"><span class="lbl">Reefing by wind speed:</span> '+REEF[c.id]+'</div>';
+  html+='<div class="warn"><span class="lbl">⚠ Hazards:</span> '+c.warn+'</div>';
+  detailBody.innerHTML=html;
+  // keep this plan's curve highlighted while the window is open
+  ringLayer.classList.add('focusing');
+  configs.forEach(cc=>groups[cc.id].classList.remove('focus'));
+  if(isSail){
+    const g=groups[c.id]; g.classList.add('focus'); ringLayer.appendChild(g);
+    if(!interactive){
+      const ang=(c.sweet[0]+c.sweet[1])/2, spd=(c.tws[0]+c.tws[1])/2;
+      placePuckAt(ang,spd); placePuck2(ang,spd); mirror=true; showPuck(true); showPuck2(true);
+      updateRays(ang,true); fadeStatic([{angle:ang,side:1},{angle:ang,side:-1}]); updatePOS(ang);
+    }
+  }
+  lower.style.display='none';
+  detailWin.classList.add('show');
+}
+function closeSheet(){
+  detailWin.classList.remove('show');
+  lower.style.display='';
+  clearFocus();
+}
+detailClose.addEventListener('click',closeSheet);
+// tapping/clicking anywhere outside the detail window closes it
+document.addEventListener('pointerdown',e=>{
+  if(detailWin.classList.contains('show') && !detailWin.contains(e.target)) closeSheet();
+});
+
+function closeHelp(){ overlay.classList.remove('show'); }
+overlay.addEventListener('click',e=>{if(e.target===overlay)closeHelp();});
+
+function openHelp(){
+  sheet.style.borderTopColor='var(--primary)';
+  sheet.innerHTML=`
+    <div class="sheet-hd"><button class="x" id="closeX">×</button>
+    <h2>How to use &middot; Disclaimer</h2></div>
+    <p style="color:var(--primary);font-weight:700;margin-top:2px;">Reading the dial</p>
+    <p>Drag the puck around the dial: its <b>angle</b> sets the point of sail (apparent wind angle) and its <b>distance from the centre</b> sets the wind speed (TWS). The left and right sides are the port and starboard tacks — both map to the same point of sail.</p>
+    <p>Each coloured band is a sail configuration. Its <b>angular span</b> is the point-of-sail range it works in, and its <b>inner &amp; outer radius</b> are its wind-speed range. The dashed rings mark wind speed (a non-linear scale so light air isn't cramped near the centre) out to <b>64 kt / hurricane</b> at the rim. Whichever bands the puck sits inside light up. The shaded wedge at the top is the <b>no-go zone</b> (&plusmn;35&deg; of dead upwind).</p>
+    <p style="color:var(--primary);font-weight:700;">Modes &amp; cards</p>
+    <p><b>Interactive</b> (default): drag the puck to filter. Turn it <b>off</b> to show every plan at once — then hovering or pressing a card places the wind indicator at that plan's ideal angle &amp; mid-wind (mirrored on both tacks). <b>Night</b> filters to sails safe to fly shorthanded after dark; a small <b>sun</b> icon marks the few daytime-only plans (most sails are night-safe and unmarked). The <b>SAILS</b> buttons enable/disable each sail (and the whisker pole); disabling one removes every plan that needs it. <b>Tap</b> a card for full setup steps, reefing, hazards, and drift / leeway notes.</p>
+    <p style="color:var(--danger);font-weight:700;">Disclaimer</p>
+    <p style="font-size:.82em;">This tool is provided for <b>educational and entertainment purposes only</b>. It is a simplified model built from a single informal guide and may contain errors or omissions. It is <b>not nautical advice</b> and must not be used for navigation, passage planning, or any real-world sailing, safety, or operational decision. Actual sail selection depends on many factors this tool ignores — sea state, crew, boat and gear condition, the weather trend, traffic, and local conditions. Always rely on proper seamanship, the vessel's official documentation, current forecasts, and your own trained judgement. The author accepts <b>no liability</b> for any loss, damage, or injury arising from use of, or reliance on, this tool. Use entirely at your own risk.</p>
+    <p style="font-size:.72em;color:#a0aec0;text-align:center;margin-top:14px;">© 2026 Eric Cosky</p>`;
+  document.getElementById('closeX').addEventListener('click',closeHelp);
+  overlay.classList.add('show');
+}
+document.getElementById('helpBtn').addEventListener('click',openHelp);
+document.getElementById('discBtn').addEventListener('click',openHelp);
+document.getElementById('discBtn').addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openHelp();}});
+
+// ---- card hover / press: isolate one config on the dial ----
+// Hover (mouse) or press-and-hold highlights that config and fades the rest.
+// Any movement before release is treated as a scrub (no dialog); moving over
+// another card highlights it. A clean tap (press+release, no move) opens details.
+let focusKey=null, press=null;
+function cardUnder(x,y){const el=document.elementFromPoint(x,y);return el?el.closest('.card.on'):null;}
+function focusCard(card){
+  if(!card) return;
+  focusKey=card.dataset.key;
+  cardsEl.classList.add('focusing');
+  slots.forEach(s=>s.el.classList.toggle('focus',s.el===card));
+  ringLayer.classList.add('focusing');
+  configs.forEach(c=>groups[c.id].classList.remove('focus'));
+  const isCfg=focusKey&&focusKey[0]==='c';
+  if(isCfg){const g=groups[+focusKey.slice(1)];if(g){g.classList.add('focus');ringLayer.appendChild(g);}}
+  // in "show all" mode the puck is hidden until you hover a card; then it jumps
+  // to that plan's ideal angle & mid-TWS and the chevrons animate.
+  if(!interactive&&isCfg){
+    const c=cfgById[+focusKey.slice(1)];
+    const ang=(c.sweet[0]+c.sweet[1])/2, spd=(c.tws[0]+c.tws[1])/2;
+    placePuckAt(ang,spd); placePuck2(ang,spd);
+    mirror=true; showPuck(true); showPuck2(true);
+    updateRays(ang,true);
+    fadeStatic([{angle:ang,side:1},{angle:ang,side:-1}]);
+    updatePOS(ang);
+  }
+}
+function clearFocus(){
+  focusKey=null;
+  cardsEl.classList.remove('focusing');
+  slots.forEach(s=>s.el.classList.remove('focus'));
+  ringLayer.classList.remove('focusing');
+  configs.forEach(c=>groups[c.id].classList.remove('focus'));
+  if(!interactive){ showPuck(false); showPuck2(false); mirror=false; hideRays(); fadeStatic([]); }
+}
+
+// ---- Interactive / Nighttime mode ----
+const interBtn=document.getElementById('interBtn');
+const nightBtn=document.getElementById('nightBtn');
+function showPuck(v){ puckGroup.style.display=v?'':'none'; }
+function showPuck2(v){ puckGroup2.style.display=v?'':'none'; }
+function placePuckAt(angle,speed){
+  placeInitial(angle,speed);
+  angleVal.textContent=Math.round(angle);
+  speedVal.textContent=Math.round(speed);
+  updateBeaufort(speed);
+}
+function offCards(){
+  return configs.filter(allowed).map(c=>({
+    key:'c'+c.id,color:c.color,short:(c.short||c.name),nightOk:!NIGHT_UNSAFE.has(c.id),engine:needsEngine(c),
+    setup:c.sails,tagText:'',tagClass:'',
+    tws:c.tws[0]+'–'+c.tws[1]+' kt',opt:c.sweet[0]+'–'+c.sweet[1]+'°',
+    safe:Math.min(c.sweet[0],c.buffer[0])+'–'+Math.max(c.sweet[1],c.buffer[1])+'°'}));
+}
+function renderOff(){
+  clearFocus();
+  configs.forEach(c=>{const g=groups[c.id];g.classList.remove('match','optimal');
+    g.classList.toggle('excluded',!allowed(c));});
+  showPuck(false); showPuck2(false); mirror=false; hideRays();
+  const l=offCards(); renderCards(l,l.length);
+}
+function setInteractive(v){
+  interactive=v; interBtn.classList.toggle('on',v); interBtn.setAttribute('aria-pressed',v);
+  if(v){ ringLayer.classList.remove('showall'); clearFocus(); showPuck2(false); mirror=false;
+    showPuck(true); update(); updateRays(state.angle,false); fadeStatic([{angle:state.angle,side:1}]); updatePOS(state.angle); }
+  else { ringLayer.classList.add('showall'); renderOff(); }
+}
+function setNight(v){
+  night=v; nightBtn.classList.toggle('on',v); nightBtn.setAttribute('aria-pressed',v);
+  if(interactive) update(); else renderOff();
+}
+interBtn.addEventListener('click',()=>setInteractive(!interactive));
+nightBtn.addEventListener('click',()=>setNight(!night));
+// SAILS enable/disable column — disabling a sail removes every plan that needs it
+const sailsCol=document.getElementById('sailsCol');
+SAILS.forEach(([k,lab])=>{
+  const b=document.createElement('button');
+  b.className='sailbtn on'; b.dataset.sail=k; b.textContent=lab;
+  b.addEventListener('click',()=>{ sailsOn[k]=!sailsOn[k]; b.classList.toggle('on',sailsOn[k]);
+    interactive?update():renderOff(); });
+  sailsCol.appendChild(b);
+});
+// clicking the SAILS label toggles all sails: any off → turn all on, else turn all off
+document.getElementById('sailsLabel').addEventListener('click',()=>{
+  const target=SAILS.some(([k])=>!sailsOn[k]);
+  SAILS.forEach(([k])=>sailsOn[k]=target);
+  sailsCol.querySelectorAll('.sailbtn').forEach(b=>b.classList.toggle('on',sailsOn[b.dataset.sail]));
+  interactive?update():renderOff();
+});
+cardsEl.addEventListener('pointerdown',e=>{
+  const card=e.target.closest('.card.on'); if(!card) return;
+  press={card,key:card.dataset.key,x:e.clientX,y:e.clientY,moved:false};
+  try{cardsEl.setPointerCapture(e.pointerId);}catch(_){}
+  focusCard(card); e.preventDefault();
+});
+cardsEl.addEventListener('pointermove',e=>{
+  if(!press) return;
+  if(Math.hypot(e.clientX-press.x,e.clientY-press.y)>8) press.moved=true;
+  const card=cardUnder(e.clientX,e.clientY);
+  if(card&&card!==press.card){press.card=card;press.key=card.dataset.key;press.moved=true;focusCard(card);}
+});
+cardsEl.addEventListener('pointerup',e=>{
+  if(!press) return;
+  const moved=press.moved,key=press.key; press=null;
+  try{cardsEl.releasePointerCapture(e.pointerId);}catch(_){}
+  if(!moved){ openSheet(key); return; }            // clean tap → details
+  if(e.pointerType==='mouse'){const c=cardUnder(e.clientX,e.clientY);c?focusCard(c):clearFocus();}
+  else clearFocus();
+});
+cardsEl.addEventListener('pointercancel',()=>{press=null;if(!detailWin.classList.contains('show'))clearFocus();});
+cardsEl.addEventListener('pointerover',e=>{
+  if(press||e.pointerType!=='mouse'||detailWin.classList.contains('show')) return;
+  const card=e.target.closest('.card.on'); if(card) focusCard(card);
+});
+cardsEl.addEventListener('pointerout',e=>{
+  if(press||e.pointerType!=='mouse'||detailWin.classList.contains('show')) return;  // keep the plan's ring isolated while the detail window is open
+  const to=e.relatedTarget&&e.relatedTarget.closest?e.relatedTarget.closest('.card.on'):null;
+  if(!to) clearFocus();
+});
+
+// pointer → svg coords
+function toSvg(evt){
+  const r=svg.getBoundingClientRect();
+  return {x:(evt.clientX-r.left)*540/r.width, y:(evt.clientY-r.top)*540/r.height};
+}
+function setFromPoint(p){
+  let dx=p.x-CX,dy=p.y-CY,dist=Math.hypot(dx,dy);
+  if(dist>MAXR){dx*=MAXR/dist;dy*=MAXR/dist;dist=MAXR;}
+  movePuck(CX+dx,CY+dy);
+  let a=Math.abs(Math.atan2(dx,-dy)*180/Math.PI);if(a>180)a=180;
+  state.angle=Math.round(a);
+  state.speed=dist<=MINR?0:Math.min(MAXSPD,Math.round(MAXSPD*Math.pow((dist-MINR)/(MAXR-MINR),1/POW)));
+  puckState.tws=state.speed;
+  update();
+  const side=dx<0?-1:1;
+  updateRays(state.angle,false,side);   // ray follows the puck's side
+  fadeStatic([{angle:state.angle,side}]);
+  updatePOS(state.angle);
+}
+let dragging=false;
+svg.addEventListener('pointerdown',e=>{
+  if(!interactive || detailWin.classList.contains('show')) return;   // card-driven, or detail window open
+  dragging=true;
+  try{svg.setPointerCapture(e.pointerId);}catch(_){}
+  setFromPoint(toSvg(e));e.preventDefault();
+});
+svg.addEventListener('pointermove',e=>{if(dragging)setFromPoint(toSvg(e));});
+svg.addEventListener('pointerup',()=>dragging=false);
+svg.addEventListener('pointercancel',()=>dragging=false);
+
+placeInitial(state.angle,state.speed);
+update();
+updateRays(state.angle,false,1);
+fadeStatic([{angle:state.angle,side:1}]);
+updatePOS(state.angle);
+</script>
+</body>
+</html>
